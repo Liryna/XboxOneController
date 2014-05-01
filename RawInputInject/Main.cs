@@ -42,6 +42,16 @@ namespace XboxOneController
                 Hooks.Add(LocalHook.Create(LocalHook.GetProcAddress("user32.dll", "RegisterRawInputDevices"),
                     new DRegisterRawInputDevices(RegisterRawInputDevices_hook),
                     this));
+
+                Hooks.Add(LocalHook.Create(LocalHook.GetProcAddress("hid.dll", "HidP_GetCaps"),
+                    new DHidP_GetCaps(HidP_GetCaps_hook),
+                    this));
+                Hooks.Add(LocalHook.Create(LocalHook.GetProcAddress("hid.dll", "HidP_GetUsages"),
+                    new DHidP_GetUsages(HidP_GetUsages_hook),
+                    this));
+                Hooks.Add(LocalHook.Create(LocalHook.GetProcAddress("hid.dll", "HidP_GetValueCaps"),
+                    new DHidP_GetValueCaps(HidP_GetValueCaps_hook),
+                    this));
                 /*
                  * Don't forget that all hooks will start deaktivated...
                  * The following ensures that all threads are intercepted:
@@ -89,6 +99,8 @@ namespace XboxOneController
             }
         }
 
+        private const uint RID_HEADER = 0x10000005;
+        private const uint RID_INPUT = 0x10000003;
         [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Unicode, SetLastError = true)]
         delegate uint DGetRawInputData(IntPtr hRawInput, uint uiCommand, IntPtr pData, ref uint pcbSize, uint cbSizeHeader);
         delegate uint DGetRawInputDataAsync(IntPtr hRawInput, uint uiCommand, IntPtr pData, ref uint pcbSize, uint cbSizeHeader);
@@ -103,8 +115,16 @@ namespace XboxOneController
                 //TODO
                 lock (This.Queue)
                 {
-                    if (This.Queue.Count < 1000)
-                        This.Queue.Push("GetRawInputData");
+                    if (uiCommand == RID_HEADER)
+                    {
+                        This.Queue.Push("GetRawInputData RID_HEADER");
+                    }
+                    else if (uiCommand == RID_INPUT)
+                    {
+                        This.Queue.Push("GetRawInputData RID_INPUT");
+                    }
+                    else
+                        This.Queue.Push("GetRawInputData " + uiCommand);
                 }
             }
             catch
@@ -125,6 +145,7 @@ namespace XboxOneController
             try
             {
                 XboxOneControllerInjection This = (XboxOneControllerInjection)HookRuntimeInfo.Callback;
+
                 //TODO
                 lock (This.Queue)
                 {
@@ -204,6 +225,212 @@ namespace XboxOneController
             {
             }
             return RegisterRawInputDevices(pRawInputDevices, uiNumDevices, cbSize);
+        }
+
+        [StructLayout(LayoutKind.Sequential, Pack = 1)]
+        public struct HidCaps
+        {
+            public ushort Usage;
+            public ushort UsagePage;
+            public ushort InputReportByteLength;
+            public ushort OutputReportByteLength;
+            public ushort FeatureReportByteLength;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 17)]
+            public short[] Reserved;
+            public ushort NumberLinkCollectionNodes;
+            public ushort NumberInputButtonCaps;
+            public ushort NumberInputValueCaps;
+            public ushort NumberInputDataIndices;
+            public ushort NumberOutputButtonCaps;
+            public ushort NumberOutputValueCaps;
+            public ushort NumberOutputDataIndices;
+            public ushort NumberFeatureButtonCaps;
+            public ushort NumberFeatureValueCaps;
+            public ushort NumberFeatureDataIndices;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Unicode, SetLastError = true)]
+        delegate bool DHidP_GetCaps(IntPtr lpData, out HidCaps oCaps);
+        delegate bool DHidP_GetCapsAsync(IntPtr lpData, out HidCaps oCaps);
+        [DllImport("hid.dll", SetLastError = true)]
+        public static extern bool HidP_GetCaps(IntPtr lpData, out HidCaps oCaps);
+        static bool HidP_GetCaps_hook(IntPtr lpData, out HidCaps oCaps)
+        {
+            try
+            {
+                XboxOneControllerInjection This = (XboxOneControllerInjection)HookRuntimeInfo.Callback;
+                //TODO
+                lock (This.Queue)
+                {
+                    if (This.Queue.Count < 1000)
+                        This.Queue.Push("HidP_GetCaps");
+                }
+            }
+            catch
+            {
+            }
+            return HidP_GetCaps(lpData, out oCaps);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct HidRange
+        {
+            public short UsageMin;
+            public short UsageMax;
+            public short StringMin;
+            public short StringMax;
+            public short DesignatorMin;
+            public short DesignatorMax;
+            public short DataIndexMin;
+            public short DataIndexMax;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct HidNotRange
+        {
+            public ushort Usage;
+            public ushort Reserved1;
+            public ushort StringIndex;
+            public ushort Reserved2;
+            public ushort DesignatorIndex;
+            public ushort Reserved3;
+            public ushort DataIndex;
+            public ushort Reserved4;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        public struct HidValueCaps
+        {
+            [FieldOffset(0)]
+            public ushort UsagePage;
+            [FieldOffset(2)]
+            public byte ReportID;
+            [MarshalAs(UnmanagedType.I1)]
+            [FieldOffset(3)]
+            public bool IsAlias;
+            [FieldOffset(4)]
+            public short BitField;
+            [FieldOffset(6)]
+            public short LinkCollection;
+            [FieldOffset(8)]
+            public short LinkUsage;
+            [FieldOffset(10)]
+            public short LinkUsagePage;
+            [MarshalAs(UnmanagedType.I1)]
+            [FieldOffset(12)]
+            public bool IsRange;
+            [MarshalAs(UnmanagedType.I1)]
+            [FieldOffset(13)]
+            public bool IsStringRange;
+            [MarshalAs(UnmanagedType.I1)]
+            [FieldOffset(14)]
+            public bool IsDesignatorRange;
+            [MarshalAs(UnmanagedType.I1)]
+            [FieldOffset(15)]
+            public bool IsAbsolute;
+            [MarshalAs(UnmanagedType.I1)]
+            [FieldOffset(16)]
+            public bool HasNull;
+            [FieldOffset(17)]
+            public byte Reserved;						// UCHAR  Reserved;
+            [FieldOffset(18)]
+            public short BitSize;
+            [FieldOffset(20)]
+            public short ReportCount;
+            [FieldOffset(22)]
+            public short Reserved2a;
+            [FieldOffset(24)]
+            public short Reserved2b;
+            [FieldOffset(26)]
+            public short Reserved2c;
+            [FieldOffset(28)]
+            public short Reserved2d;
+            [FieldOffset(30)]
+            public short Reserved2e;
+            [FieldOffset(32)]
+            public short UnitsExp;
+            [FieldOffset(34)]
+            public short Units;
+            [FieldOffset(36)]
+            public short LogicalMin;
+            [FieldOffset(38)]
+            public short LogicalMax;
+            [FieldOffset(40)]
+            public short PhysicalMin;
+            [FieldOffset(42)]
+            public short PhysicalMax;
+            // The Structs in the Union			
+            [FieldOffset(44)]
+            public HidRange Range;
+            [FieldOffset(44)]
+            public HidNotRange NotRange;
+        }
+
+        public enum HIDP_REPORT_TYPE
+        {
+            HidP_Input,
+            HidP_Output,
+            HidP_Feature,
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Unicode, SetLastError = true)]
+        delegate int DHidP_GetValueCaps(HIDP_REPORT_TYPE reportType, [In, Out] HidValueCaps[] valueCaps, ref ushort valueCapsLength, IntPtr preparsedData);
+        delegate int DHidP_GetValueCapsAsync(HIDP_REPORT_TYPE reportType, [In, Out] HidValueCaps[] valueCaps, ref ushort valueCapsLength, IntPtr preparsedData);
+        [DllImport("hid.dll", SetLastError = true)]
+        public static extern int HidP_GetValueCaps(HIDP_REPORT_TYPE reportType, [In, Out] HidValueCaps[] valueCaps, ref ushort valueCapsLength, IntPtr preparsedData);
+        static int HidP_GetValueCaps_hook(HIDP_REPORT_TYPE reportType, [In, Out] HidValueCaps[] valueCaps, ref ushort valueCapsLength, IntPtr preparsedData)
+        {
+                try
+            {
+                XboxOneControllerInjection This = (XboxOneControllerInjection)HookRuntimeInfo.Callback;
+                //TODO
+                lock (This.Queue)
+                {
+                    if (This.Queue.Count < 1000)
+                        This.Queue.Push("HidP_GetValueCaps");
+                }
+            }
+            catch
+            {
+            }
+            return HidP_GetValueCaps(reportType, valueCaps, ref valueCapsLength, preparsedData);
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        public struct HIDP_DATA
+        {
+            [FieldOffset(0)]
+            public short DataIndex;
+            [FieldOffset(2)]
+            public short Reserved;
+
+            [FieldOffset(4)]
+            public int RawValue;
+            [FieldOffset(4), MarshalAs(UnmanagedType.U1)]
+            public bool On;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Unicode, SetLastError = true)]
+        delegate int DHidP_GetUsages(HIDP_REPORT_TYPE ReportType, short UsagePage, short LinkCollection, [In, Out] HIDP_DATA[] UsageList, ref int UsageLength, IntPtr PreparsedData, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 7)] byte[] Report, int ReportLength);
+        delegate int DHidP_GetUsagesAsync(HIDP_REPORT_TYPE ReportType, short UsagePage, short LinkCollection, [In, Out] HIDP_DATA[] UsageList, ref int UsageLength, IntPtr PreparsedData, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 7)] byte[] Report, int ReportLength);
+        [DllImport("hid.dll", SetLastError = true)]
+        static public extern int HidP_GetUsages(HIDP_REPORT_TYPE ReportType, short UsagePage, short LinkCollection, [In, Out] HIDP_DATA[] UsageList, ref int UsageLength, IntPtr PreparsedData, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 7)] byte[] Report, int ReportLength);
+        static int HidP_GetUsages_hook(HIDP_REPORT_TYPE ReportType, short UsagePage, short LinkCollection, [In, Out] HIDP_DATA[] UsageList, ref int UsageLength, IntPtr PreparsedData, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 7)] byte[] Report, int ReportLength)
+        {
+            try
+            {
+                XboxOneControllerInjection This = (XboxOneControllerInjection)HookRuntimeInfo.Callback;
+                //TODO
+                lock (This.Queue)
+                {
+                    if (This.Queue.Count < 1000)
+                        This.Queue.Push("HidP_GetUsages");
+                }
+            }
+            catch
+            {
+            }
+            return HidP_GetUsages(ReportType, UsagePage, LinkCollection, UsageList, ref UsageLength, PreparsedData, Report, ReportLength);
         }
     }
 }
